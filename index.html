@@ -265,7 +265,7 @@ function renderQuestion(){
   let h="";
   branchesFor(q).forEach(b=>{
     h+=`<div class="branch" data-branch="${b}"><div class="branch-title">${b==="main"?"仕訳":b+" の仕訳"}</div><div class="journal-grid"><div class="journal-head">借方科目</div><div class="journal-head">金額</div><div class="journal-head credit">貸方科目</div><div class="journal-head credit">金額</div>`;
-    for(let i=0;i<4;i++)h+=`<select class="debit-account" data-side="debit" data-branch="${b}">${optionHtml(q)}</select><input class="amount debit-amount" data-side="debit" data-branch="${b}" type="number" inputmode="numeric" min="0" placeholder="0"><select class="credit-account" data-side="credit" data-branch="${b}">${optionHtml(q)}</select><input class="amount credit-amount" data-side="credit" data-branch="${b}" type="number" inputmode="numeric" min="0" placeholder="0">`;
+    for(let i=0;i<4;i++)h+=`<select class="debit-account" data-side="debit" data-branch="${b}">${optionHtml(q)}</select><input class="amount debit-amount" data-side="debit" data-branch="${b}" type="text" inputmode="numeric" pattern="[0-9,]*" autocomplete="off" placeholder="0"><select class="credit-account" data-side="credit" data-branch="${b}">${optionHtml(q)}</select><input class="amount credit-amount" data-side="credit" data-branch="${b}" type="text" inputmode="numeric" pattern="[0-9,]*" autocomplete="off" placeholder="0">`;
     h+="</div></div>";
   });
   document.getElementById("answerArea").innerHTML=h;
@@ -275,7 +275,10 @@ function renderQuestion(){
 function collect(branch,side){
   const p=document.querySelector(`.branch[data-branch="${branch}"]`),sels=[...p.querySelectorAll(`select[data-side="${side}"]`)],amts=[...p.querySelectorAll(`input[data-side="${side}"]`)];
   const out=[];
-  sels.forEach((sel,i)=>{const account=sel.value.trim();if(!account)return;if(account==="仕訳なし")out.push({account,amount:null});else out.push({account,amount:amts[i].value===""?null:Number(amts[i].value)})});
+  sels.forEach((sel,i)=>{const account=sel.value.trim();if(!account)return;if(account==="仕訳なし")out.push({account,amount:null});else {
+      const raw=amts[i].value.replace(/,/g,"").trim();
+      out.push({account,amount:raw===""?null:Number(raw)})
+    }});
   return out;
 }
 function expected(q,b,side){return q[side].filter(e=>e.branch===b).map(e=>({account:e.account,amount:e.amount}))}
@@ -326,6 +329,22 @@ function restore(file){
   reader.onload=()=>{try{const obj=JSON.parse(reader.result);if(!obj.stats)throw new Error();state=obj;saveState();renderStats();renderResume();alert("成績を復元しました。")}catch(e){alert("バックアップファイルを読み込めませんでした。")}};
   reader.readAsText(file);
 }
+
+function formatAmountInput(el){
+  const digits=el.value.replace(/[^\d]/g,"");
+  if(!digits){el.value="";return}
+  el.value=digits.replace(/\B(?=(\d{3})+(?!\d))/g,",");
+}
+
+document.getElementById("answerArea").addEventListener("input",e=>{
+  if(e.target.classList.contains("amount")) formatAmountInput(e.target);
+});
+
+document.getElementById("answerArea").addEventListener("paste",e=>{
+  if(!e.target.classList.contains("amount")) return;
+  setTimeout(()=>formatAmountInput(e.target),0);
+});
+
 document.getElementById("startBtn").onclick=startQuiz;
 document.getElementById("gradeBtn").onclick=grade;
 document.getElementById("nextBtn").onclick=nextQ;
