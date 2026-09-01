@@ -19,6 +19,18 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
 .journal-grid{display:grid;grid-template-columns:minmax(220px,1fr) 190px minmax(220px,1fr) 190px;gap:8px;align-items:center}.journal-head{font-size:12px;font-weight:700;color:var(--sub)}
 .amount{text-align:right;font-size:16px;padding:11px 12px;min-width:170px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.result{margin-top:14px;border-radius:12px;padding:13px;display:none;line-height:1.65}
 .result.ok{display:block;background:#dcfce7;color:#14532d}.result.ng{display:block;background:#fee2e2;color:#7f1d1d}.answer{margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.12)}
+.answer-table-wrap{margin-top:10px;overflow-x:auto}
+.answer-branch-title{font-weight:800;margin:12px 0 7px}
+.answer-table{width:100%;border-collapse:collapse;background:#fff;color:#111827;border-radius:10px;overflow:hidden}
+.answer-table th,.answer-table td{border:1px solid #d1d5db;padding:9px 11px;text-align:left;vertical-align:middle}
+.answer-table th{background:#f3f4f6;font-size:12px;font-weight:800}
+.answer-table td.account-cell{font-weight:700}
+.answer-table td.amount-cell{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700}
+.answer-table .empty-cell{background:#fafafa}
+@media(max-width:700px){
+  .answer-table th,.answer-table td{padding:8px 7px;font-size:13px}
+}
+
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.stat{padding:10px;background:#f9fafb;border-radius:10px;text-align:center}.stat b{font-size:18px;display:block}
 .small{font-size:12px;color:var(--sub)}.hidden{display:none!important}.notice{font-size:13px;line-height:1.6;color:#374151;margin-top:10px}
 @media(max-width:700px){.controls{grid-template-columns:1fr 1fr}.journal-grid{grid-template-columns:minmax(0,1fr) 135px}.journal-head.credit{display:none}.credit-account{grid-column:1}.credit-amount{grid-column:2}header{gap:8px}.badge{font-size:11px}}
@@ -34,7 +46,7 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
 <header>
   <div>
     <h1>簿記2級 仕訳トレーナー</h1>
-    <div class="small">クラウド同期版 v2.2｜自己評価ボタン対応｜全82問・第1問72問・第4問10問</div>
+    <div class="small">クラウド同期版 v2.3｜正解仕訳テーブル表示｜全82問・第1問72問・第4問10問</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <span class="badge" id="saveBadge">ローカル保存</span>
@@ -303,9 +315,64 @@ function collect(branch,side){
 function expected(q,b,side){return q[side].filter(e=>e.branch===b).map(e=>({account:e.account,amount:e.amount}))}
 function norm(a){return a.map(x=>`${x.account}@@${x.amount===null?"":Number(x.amount)}`).sort()}
 function same(a,b){const A=norm(a),B=norm(b);return A.length===B.length&&A.every((x,i)=>x===B[i])}
-function formatExpected(q){
-  let s=[];branchesFor(q).forEach(b=>{if(b!=="main")s.push(b);const f=a=>a.length?a.map(x=>x.account==="仕訳なし"?"仕訳なし":`${x.account} ${Number(x.amount).toLocaleString()}`).join(" / "):"なし";s.push(`借方：${f(expected(q,b,"debit"))}\n貸方：${f(expected(q,b,"credit"))}`)});return s.join("\n");
+function formatExpectedTable(q){
+  const money=n=>Number(n).toLocaleString("ja-JP");
+  let htmlParts=[];
+
+  for(const b of branchesFor(q)){
+    const debits=expected(q,b,"debit");
+    const credits=expected(q,b,"credit");
+
+    if(b!=="main"){
+      htmlParts.push(`<div class="answer-branch-title">${esc(b)} の正解仕訳</div>`);
+    }
+
+    // 「仕訳なし」の問題
+    const noEntry =
+      (debits.length===1 && debits[0].account==="仕訳なし") ||
+      (credits.length===1 && credits[0].account==="仕訳なし");
+
+    if(noEntry){
+      htmlParts.push(`<div class="answer-table-wrap"><table class="answer-table">
+        <thead><tr><th>借方（左）</th><th>金額（円）</th><th>貸方（右）</th><th>金額（円）</th></tr></thead>
+        <tbody><tr><td class="account-cell" colspan="4">仕訳なし</td></tr></tbody>
+      </table></div>`);
+      continue;
+    }
+
+    const rows=Math.max(debits.length,credits.length);
+    let body="";
+
+    for(let i=0;i<rows;i++){
+      const d=debits[i] || null;
+      const c=credits[i] || null;
+
+      body += `<tr>
+        <td class="${d?'account-cell':'empty-cell'}">${d ? esc(d.account) : ""}</td>
+        <td class="${d?'amount-cell':'empty-cell'}">${d && d.amount!==null ? money(d.amount) : ""}</td>
+        <td class="${c?'account-cell':'empty-cell'}">${c ? esc(c.account) : ""}</td>
+        <td class="${c?'amount-cell':'empty-cell'}">${c && c.amount!==null ? money(c.amount) : ""}</td>
+      </tr>`;
+    }
+
+    htmlParts.push(`<div class="answer-table-wrap">
+      <table class="answer-table">
+        <thead>
+          <tr>
+            <th>借方（左）</th>
+            <th>金額（円）</th>
+            <th>貸方（右）</th>
+            <th>金額（円）</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>`);
+  }
+
+  return htmlParts.join("");
 }
+
 function evaluateCurrentAnswer(){
   const q=queue[currentIndex];
   let ok=true;
@@ -360,7 +427,7 @@ function finishGrading(mode){
 
   r.className="result "+cls;
   r.innerHTML=`<b>${label}</b>
-    <div class="answer">${esc(formatExpected(q)).replace(/\n/g,"<br>")}</div>
+    <div class="answer">${formatExpectedTable(q)}</div>
     <div class="answer"><b>ポイント</b><br>${esc(q.explanation)}</div>`;
 
   document.getElementById("gradeBtn").classList.add("hidden");
