@@ -34,7 +34,7 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
 <header>
   <div>
     <h1>簿記2級 仕訳トレーナー</h1>
-    <div class="small">クラウド同期版｜全82問・第1問72問・第4問10問</div>
+    <div class="small">クラウド同期版 v2.1｜カンマ入力対応｜全82問・第1問72問・第4問10問</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <span class="badge" id="saveBadge">ローカル保存</span>
@@ -265,7 +265,9 @@ function renderQuestion(){
   let h="";
   branchesFor(q).forEach(b=>{
     h+=`<div class="branch" data-branch="${b}"><div class="branch-title">${b==="main"?"仕訳":b+" の仕訳"}</div><div class="journal-grid"><div class="journal-head">借方科目</div><div class="journal-head">金額</div><div class="journal-head credit">貸方科目</div><div class="journal-head credit">金額</div>`;
-    for(let i=0;i<4;i++)h+=`<select class="debit-account" data-side="debit" data-branch="${b}">${optionHtml(q)}</select><input class="amount debit-amount" data-side="debit" data-branch="${b}" type="text" inputmode="numeric" pattern="[0-9,]*" autocomplete="off" placeholder="0"><select class="credit-account" data-side="credit" data-branch="${b}">${optionHtml(q)}</select><input class="amount credit-amount" data-side="credit" data-branch="${b}" type="text" inputmode="numeric" pattern="[0-9,]*" autocomplete="off" placeholder="0">`;
+    for(let i=0;i<4;i++)h+=`<select class="debit-account" data-side="debit" data-branch="${b}">${optionHtml(q)}</select><input class="amount debit-amount" data-side="debit" data-branch="${b}" type="text" inputmode="numeric" pattern="[0-9,]*" autocomplete="off" placeholder="0"
+oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,',')"><select class="credit-account" data-side="credit" data-branch="${b}">${optionHtml(q)}</select><input class="amount credit-amount" data-side="credit" data-branch="${b}" type="text" inputmode="numeric" pattern="[0-9,]*" autocomplete="off" placeholder="0"
+oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,',')">`;
     h+="</div></div>";
   });
   document.getElementById("answerArea").innerHTML=h;
@@ -276,7 +278,7 @@ function collect(branch,side){
   const p=document.querySelector(`.branch[data-branch="${branch}"]`),sels=[...p.querySelectorAll(`select[data-side="${side}"]`)],amts=[...p.querySelectorAll(`input[data-side="${side}"]`)];
   const out=[];
   sels.forEach((sel,i)=>{const account=sel.value.trim();if(!account)return;if(account==="仕訳なし")out.push({account,amount:null});else {
-      const raw=amts[i].value.replace(/,/g,"").trim();
+      const raw=amts[i].value.replace(/,/g,"").replace(/[^0-9]/g,"").trim();
       out.push({account,amount:raw===""?null:Number(raw)})
     }});
   return out;
