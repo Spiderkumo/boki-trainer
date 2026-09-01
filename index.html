@@ -16,12 +16,12 @@ select,input,button{font:inherit}select,input[type=number]{width:100%;padding:10
 button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:pointer}.primary{background:var(--accent);color:white}.secondary{background:#e5e7eb;color:#111827}.danger{background:#fee2e2;color:#991b1b}
 .status{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--sub);font-size:13px}.qtext{white-space:pre-wrap;line-height:1.75;font-size:16px}
 .branch{border-top:1px solid #eee;padding-top:14px;margin-top:14px}.branch:first-child{border-top:0;padding-top:0}.branch-title{font-weight:800;margin-bottom:10px}
-.journal-grid{display:grid;grid-template-columns:1fr 140px 1fr 140px;gap:8px;align-items:center}.journal-head{font-size:12px;font-weight:700;color:var(--sub)}
-.amount{text-align:right}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.result{margin-top:14px;border-radius:12px;padding:13px;display:none;line-height:1.65}
+.journal-grid{display:grid;grid-template-columns:minmax(220px,1fr) 190px minmax(220px,1fr) 190px;gap:8px;align-items:center}.journal-head{font-size:12px;font-weight:700;color:var(--sub)}
+.amount{text-align:right;font-size:16px;padding:11px 12px;min-width:170px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.result{margin-top:14px;border-radius:12px;padding:13px;display:none;line-height:1.65}
 .result.ok{display:block;background:#dcfce7;color:#14532d}.result.ng{display:block;background:#fee2e2;color:#7f1d1d}.answer{margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.12)}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.stat{padding:10px;background:#f9fafb;border-radius:10px;text-align:center}.stat b{font-size:18px;display:block}
 .small{font-size:12px;color:var(--sub)}.hidden{display:none!important}.notice{font-size:13px;line-height:1.6;color:#374151;margin-top:10px}
-@media(max-width:700px){.controls{grid-template-columns:1fr 1fr}.journal-grid{grid-template-columns:1fr 110px}.journal-head.credit{display:none}.credit-account{grid-column:1}.credit-amount{grid-column:2}header{gap:8px}.badge{font-size:11px}}
+@media(max-width:700px){.controls{grid-template-columns:1fr 1fr}.journal-grid{grid-template-columns:minmax(0,1fr) 135px}.journal-head.credit{display:none}.credit-account{grid-column:1}.credit-amount{grid-column:2}header{gap:8px}.badge{font-size:11px}}
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
@@ -34,7 +34,7 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
 <header>
   <div>
     <h1>簿記2級 仕訳トレーナー</h1>
-    <div class="small">クラウド同期版 v2.1｜カンマ入力対応｜全82問・第1問72問・第4問10問</div>
+    <div class="small">クラウド同期版 v2.2｜自己評価ボタン対応｜全82問・第1問72問・第4問10問</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <span class="badge" id="saveBadge">ローカル保存</span>
@@ -66,7 +66,13 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
   <div class="card"><div class="qtext" id="qtext"></div></div>
   <div class="card">
     <div id="answerArea"></div>
-    <div class="actions"><button class="primary" id="gradeBtn">採点する</button><button class="secondary hidden" id="nextBtn">次の問題</button><button class="secondary" id="quitBtn">メニューへ</button></div>
+    <div class="actions">
+      <button class="primary" id="gradeBtn">採点する</button>
+      <button class="secondary" id="uncertainBtn">解けたけど微妙</button>
+      <button class="danger" id="dontKnowBtn">わからない</button>
+      <button class="secondary hidden" id="nextBtn">次の問題</button>
+      <button class="secondary" id="quitBtn">メニューへ</button>
+    </div>
     <div id="result" class="result"></div>
   </div>
 </div>
@@ -240,7 +246,15 @@ function startQuiz(){
   let pool=QUESTIONS.filter(q=>section==="ALL"||q.section===section);
   if(mode==="wrong")pool=pool.filter(q=>qstat(q.id).last==="wrong");
   if(mode==="unseen")pool=pool.filter(q=>qstat(q.id).attempts===0);
-  if(mode==="weak")pool=[...pool].sort((a,b)=>{const A=qstat(a.id),B=qstat(b.id),pa=A.attempts?A.correct/A.attempts:-1,pb=B.attempts?B.correct/B.attempts:-1;return pa!==pb?pa-pb:A.attempts-B.attempts});
+  if(mode==="weak")pool=[...pool].sort((a,b)=>{
+    const A=qstat(a.id),B=qstat(b.id);
+    const rank=s=>s.last==="wrong"?0:s.last==="uncertain"?1:s.attempts===0?2:3;
+    const ra=rank(A),rb=rank(B);
+    if(ra!==rb) return ra-rb;
+    const pa=A.attempts?A.correct/A.attempts:1;
+    const pb=B.attempts?B.correct/B.attempts:1;
+    return pa!==pb?pa-pb:A.attempts-B.attempts;
+  });
   else pool=shuffle(pool);
   if(!pool.length){alert("条件に合う問題がありません。");return}
   if(count!=="ALL")pool=pool.slice(0,Math.min(Number(count),pool.length));
@@ -272,7 +286,10 @@ oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d
   });
   document.getElementById("answerArea").innerHTML=h;
   const r=document.getElementById("result");r.className="result";r.textContent="";
-  document.getElementById("gradeBtn").classList.remove("hidden");document.getElementById("nextBtn").classList.add("hidden");
+  document.getElementById("gradeBtn").classList.remove("hidden");
+  document.getElementById("uncertainBtn").classList.remove("hidden");
+  document.getElementById("dontKnowBtn").classList.remove("hidden");
+  document.getElementById("nextBtn").classList.add("hidden");
 }
 function collect(branch,side){
   const p=document.querySelector(`.branch[data-branch="${branch}"]`),sels=[...p.querySelectorAll(`select[data-side="${side}"]`)],amts=[...p.querySelectorAll(`input[data-side="${side}"]`)];
@@ -289,17 +306,73 @@ function same(a,b){const A=norm(a),B=norm(b);return A.length===B.length&&A.every
 function formatExpected(q){
   let s=[];branchesFor(q).forEach(b=>{if(b!=="main")s.push(b);const f=a=>a.length?a.map(x=>x.account==="仕訳なし"?"仕訳なし":`${x.account} ${Number(x.amount).toLocaleString()}`).join(" / "):"なし";s.push(`借方：${f(expected(q,b,"debit"))}\n貸方：${f(expected(q,b,"credit"))}`)});return s.join("\n");
 }
-function grade(){
-  if(graded)return;
-  const q=queue[currentIndex];let ok=true;
-  for(const b of branchesFor(q)){if(!same(collect(b,"debit"),expected(q,b,"debit")))ok=false;if(!same(collect(b,"credit"),expected(q,b,"credit")))ok=false}
-  const s=qstat(q.id);s.attempts++;if(ok)s.correct++;s.last=ok?"correct":"wrong";s.updatedAt=new Date().toISOString();state.stats[q.id]=s;
+function evaluateCurrentAnswer(){
+  const q=queue[currentIndex];
+  let ok=true;
+  for(const b of branchesFor(q)){
+    if(!same(collect(b,"debit"),expected(q,b,"debit"))) ok=false;
+    if(!same(collect(b,"credit"),expected(q,b,"credit"))) ok=false;
+  }
+  return ok;
+}
+
+function finishGrading(mode){
+  if(graded) return;
+  const q=queue[currentIndex];
+  const ok = mode==="unknown" ? false : evaluateCurrentAnswer();
+
+  const s=qstat(q.id);
+  s.attempts++;
+  if(ok) s.correct++;
+
+  if(mode==="unknown"){
+    s.last="wrong";
+    s.selfRating="unknown";
+  }else if(mode==="uncertain"){
+    s.last=ok ? "uncertain" : "wrong";
+    s.selfRating="uncertain";
+  }else{
+    s.last=ok ? "correct" : "wrong";
+    s.selfRating=ok ? "confident" : "wrong";
+  }
+
+  s.updatedAt=new Date().toISOString();
+  state.stats[q.id]=s;
   graded=true;
   state.session={ids:queue.map(x=>x.id),index:currentIndex,graded:true};
-  saveState();renderStats();
-  const r=document.getElementById("result");r.className="result "+(ok?"ok":"ng");r.innerHTML=`<b>${ok?"正解":"不正解"}</b><div class="answer">${esc(formatExpected(q)).replace(/\n/g,"<br>")}</div><div class="answer"><b>ポイント</b><br>${esc(q.explanation)}</div>`;
-  document.getElementById("gradeBtn").classList.add("hidden");document.getElementById("nextBtn").classList.remove("hidden");
+  saveState();
+  renderStats();
+
+  const r=document.getElementById("result");
+  let label="", cls="ng";
+
+  if(mode==="unknown"){
+    label="× わからない";
+  }else if(mode==="uncertain" && ok){
+    label="△ 正解。ただし復習対象";
+    cls="ok";
+  }else if(ok){
+    label="○ 正解";
+    cls="ok";
+  }else{
+    label="× 不正解";
+  }
+
+  r.className="result "+cls;
+  r.innerHTML=`<b>${label}</b>
+    <div class="answer">${esc(formatExpected(q)).replace(/\n/g,"<br>")}</div>
+    <div class="answer"><b>ポイント</b><br>${esc(q.explanation)}</div>`;
+
+  document.getElementById("gradeBtn").classList.add("hidden");
+  document.getElementById("uncertainBtn").classList.add("hidden");
+  document.getElementById("dontKnowBtn").classList.add("hidden");
+  document.getElementById("nextBtn").classList.remove("hidden");
 }
+
+function grade(){finishGrading("normal");}
+function gradeUncertain(){finishGrading("uncertain");}
+function gradeDontKnow(){finishGrading("unknown");}
+
 function nextQ(){
   if(currentIndex+1>=queue.length){
     state.session=null;saveState();
@@ -349,6 +422,8 @@ document.getElementById("answerArea").addEventListener("paste",e=>{
 
 document.getElementById("startBtn").onclick=startQuiz;
 document.getElementById("gradeBtn").onclick=grade;
+document.getElementById("uncertainBtn").onclick=gradeUncertain;
+document.getElementById("dontKnowBtn").onclick=gradeDontKnow;
 document.getElementById("nextBtn").onclick=nextQ;
 document.getElementById("quitBtn").onclick=()=>{document.getElementById("quiz").classList.add("hidden");document.getElementById("setup").classList.remove("hidden");renderResume()};
 document.getElementById("resumeBtn").onclick=resumeSession;
