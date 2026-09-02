@@ -78,7 +78,7 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
 <header>
   <div>
     <h1>簿記2級 仕訳トレーナー</h1>
-    <div class="small" id="versionInfo">クラウド問題DB版 v3.0.1｜仕訳なし採点修正版｜全79問・第1問69問・第4問10問</div>
+    <div class="small" id="versionInfo">クラウド問題DB版 v3.0.2｜採点時に次問保存｜全79問・第1問69問・第4問10問</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <span class="badge" id="saveBadge">ローカル保存</span>
@@ -670,11 +670,12 @@ async function loadCloudState(){
     }
 
     const migrated=migrateMergedQuestions();
+    const sessionMigrated=migrateCompletedSessionPosition();
     cloudReady=true;
     renderStats();
     renderResume();
     setSyncBadge("クラウド同期済","ok");
-    if(migrated) syncStateToCloud();
+    if(migrated || sessionMigrated) syncStateToCloud();
   }catch(err){
     console.error(err);
     cloudReady=false;
@@ -802,6 +803,36 @@ function migrateMergedQuestions(){
   state.savedAt=new Date().toISOString();
   try{localStorage.setItem(STATE_KEY,JSON.stringify(state));}catch(e){}
   return true;
+}
+
+
+function migrateCompletedSessionPosition(){
+  const version="graded-session-advance-v1";
+  if(state.sessionPositionMigration===version) return false;
+
+  let changed=false;
+
+  // v3.0.1以前は採点済みでも index がその問題のままだった。
+  if(state.session && state.session.graded===true && Array.isArray(state.session.ids)){
+    const nextIndex=Number(state.session.index||0)+1;
+    if(nextIndex>=state.session.ids.length){
+      state.session=null;
+    }else{
+      state.session={
+        ids:state.session.ids,
+        index:nextIndex,
+        graded:false
+      };
+    }
+    changed=true;
+  }
+
+  state.sessionPositionMigration=version;
+  if(changed){
+    state.savedAt=new Date().toISOString();
+    try{localStorage.setItem(STATE_KEY,JSON.stringify(state));}catch(e){}
+  }
+  return changed;
 }
 
 function qstat(id){return state.stats[id]||{attempts:0,correct:0,last:null,updatedAt:null}}
@@ -980,7 +1011,19 @@ function finishGrading(mode){
   s.updatedAt=new Date().toISOString();
   state.stats[q.id]=s;
   graded=true;
-  state.session={ids:queue.map(x=>x.id),index:currentIndex,graded:true};
+
+  // 採点した瞬間にこの問題は完了扱い。
+  // 再開位置は次の問題へ進めて保存する。
+  if(currentIndex+1>=queue.length){
+    state.session=null;
+  }else{
+    state.session={
+      ids:queue.map(x=>x.id),
+      index:currentIndex+1,
+      graded:false
+    };
+  }
+
   saveState();
   renderStats();
 
@@ -1102,7 +1145,7 @@ document.getElementById("questionList").onclick=e=>{
 document.getElementById("loginBtn").onclick=loginGoogle;
 document.getElementById("logoutBtn").onclick=logoutGoogle;
 
-loadQuestionCache();loadState();migrateMergedQuestions();requestPersistentStorage();updateQuestionCountLabel();renderStats();renderResume();updateSaveBadge();clearQuestionForm();renderQuestionList();
+loadQuestionCache();loadState();migrateMergedQuestions();migrateCompletedSessionPosition();requestPersistentStorage();updateQuestionCountLabel();renderStats();renderResume();updateSaveBadge();clearQuestionForm();renderQuestionList();
 </script>
 </body>
 </html>
