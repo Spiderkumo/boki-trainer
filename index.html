@@ -46,7 +46,7 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
 <header>
   <div>
     <h1>簿記2級 仕訳トレーナー</h1>
-    <div class="small">クラウド同期版 v2.4｜iPhoneログイン修正版｜全82問・第1問72問・第4問10問</div>
+    <div class="small">クラウド同期版 v2.5｜iPhoneログイン再修正版｜全82問・第1問72問・第4問10問</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <span class="badge" id="saveBadge">ローカル保存</span>
@@ -186,13 +186,6 @@ async function loadCloudState(){
 
 let loginInProgress = false;
 
-function isMobileApple(){
-  const ua = navigator.userAgent || "";
-  const iOS = /iPad|iPhone|iPod/.test(ua);
-  const iPadOS = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
-  return iOS || iPadOS;
-}
-
 async function loginGoogle(){
   if(loginInProgress) return;
 
@@ -207,30 +200,16 @@ async function loginGoogle(){
   try{
     await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
-    if(isMobileApple()){
-      await auth.signInWithRedirect(provider);
-      return;
-    }
-
+    // PC / iPhone ともに1回だけポップアップを開く。
+    // 二重呼び出しは loginInProgress で防止。
     await auth.signInWithPopup(provider);
 
   }catch(err){
     console.error(err);
 
-    if(
-      isMobileApple() &&
-      (
-        err?.code === "auth/cancelled-popup-request" ||
-        err?.code === "auth/popup-blocked" ||
-        err?.code === "auth/popup-closed-by-user"
-      )
-    ){
-      try{
-        await auth.signInWithRedirect(provider);
-        return;
-      }catch(redirectErr){
-        console.error(redirectErr);
-      }
+    if(err?.code === "auth/popup-closed-by-user"){
+      // ユーザーが閉じた場合は警告不要
+      return;
     }
 
     alert("Googleログインに失敗しました。\n" + (err.message || err));
@@ -249,12 +228,6 @@ async function logoutGoogle(){
 }
 
 
-auth.getRedirectResult().catch(err=>{
-  console.error("Redirect login error:", err);
-  if(err && err.code){
-    alert("Googleログインに失敗しました。\n" + (err.message || err.code));
-  }
-});
 
 auth.onAuthStateChanged(async user=>{
   currentUser=user||null;
