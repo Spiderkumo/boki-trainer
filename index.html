@@ -78,7 +78,7 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
 <header>
   <div>
     <h1>簿記2級 仕訳トレーナー</h1>
-    <div class="small" id="versionInfo">クラウド問題DB版 v3.0｜全79問・第1問69問・第4問10問</div>
+    <div class="small" id="versionInfo">クラウド問題DB版 v3.0.1｜仕訳なし採点修正版｜全79問・第1問69問・第4問10問</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <span class="badge" id="saveBadge">ローカル保存</span>
@@ -935,8 +935,24 @@ function evaluateCurrentAnswer(){
   const q=queue[currentIndex];
   let ok=true;
   for(const b of branchesFor(q)){
-    if(!same(collect(b,"debit"),expected(q,b,"debit"))) ok=false;
-    if(!same(collect(b,"credit"),expected(q,b,"credit"))) ok=false;
+    const expDebit=expected(q,b,"debit");
+    const expCredit=expected(q,b,"credit");
+    const userDebit=collect(b,"debit");
+    const userCredit=collect(b,"credit");
+
+    // 「仕訳なし」は試験仕様どおり、借方科目欄に1回選べば正解。
+    // 旧データで借方・貸方の両方に「仕訳なし」が登録されていても吸収する。
+    const noEntryExpected=[...expDebit,...expCredit].some(x=>x.account==="仕訳なし");
+    if(noEntryExpected){
+      const nonEmpty=[...userDebit,...userCredit];
+      const noEntryCount=nonEmpty.filter(x=>x.account==="仕訳なし").length;
+      const otherCount=nonEmpty.filter(x=>x.account!=="仕訳なし").length;
+      if(noEntryCount<1 || otherCount>0) ok=false;
+      continue;
+    }
+
+    if(!same(userDebit,expDebit)) ok=false;
+    if(!same(userCredit,expCredit)) ok=false;
   }
   return ok;
 }
