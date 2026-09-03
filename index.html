@@ -78,7 +78,7 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
 <header>
   <div>
     <h1>簿記2級 仕訳トレーナー</h1>
-    <div class="small" id="versionInfo">クラウド問題DB版 v3.0.2｜採点時に次問保存｜全79問・第1問69問・第4問10問</div>
+    <div class="small" id="versionInfo">クラウド問題DB版 v3.0.4｜セット結果・5問換算得点｜全79問・第1問69問・第4問10問</div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <span class="badge" id="saveBadge">ローカル保存</span>
@@ -221,6 +221,18 @@ button{border:0;border-radius:11px;padding:11px 14px;font-weight:700;cursor:poin
     <div id="result" class="result"></div>
   </div>
 </div>
+</div>
+
+<div id="setSummary" class="card hidden">
+  <div style="text-align:center;padding:10px 4px">
+    <div class="small">今回の演習結果</div>
+    <h2 style="margin:6px 0 10px">セット終了</h2>
+    <div id="setSummaryCorrect" style="font-size:22px;font-weight:800;margin-bottom:8px"></div>
+    <div id="setSummaryScore" style="font-size:34px;font-weight:900;margin:8px 0"></div>
+    <div id="setSummaryRate" class="small" style="margin-bottom:16px"></div>
+    <div id="setSummaryNote" class="small" style="margin-bottom:18px"></div>
+    <button class="primary" id="summaryBackBtn">メニューへ戻る</button>
+  </div>
 </div>
 
 <script>
@@ -756,7 +768,7 @@ auth.onAuthStateChanged(async user=>{
 
 const STATE_KEY="boki2_shiwake_autosave_v2";
 let state={stats:{},session:null,savedAt:null};
-let queue=[],currentIndex=0,graded=false;
+let queue=[],currentIndex=0,graded=false,setAnswered=0,setCorrect=0;
 
 function loadState(){
   try{
@@ -860,7 +872,16 @@ function startQuiz(){
   if(!pool.length){alert("条件に合う問題がありません。");return}
   if(count!=="ALL")pool=pool.slice(0,Math.min(Number(count),pool.length));
   queue=pool;currentIndex=0;
-  state.session={ids:queue.map(q=>q.id),index:0,graded:false};
+  setAnswered=0;
+  setCorrect=0;
+  state.lastSetResult=null;
+  state.session={
+    ids:queue.map(q=>q.id),
+    index:0,
+    graded:false,
+    setAnswered:0,
+    setCorrect:0
+  };
   saveState();
   showQuiz();renderQuestion();
 }
@@ -890,7 +911,9 @@ oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d
   document.getElementById("gradeBtn").classList.remove("hidden");
   document.getElementById("uncertainBtn").classList.remove("hidden");
   document.getElementById("dontKnowBtn").classList.remove("hidden");
-  document.getElementById("nextBtn").classList.add("hidden");
+  const nextBtn=document.getElementById("nextBtn");
+  nextBtn.textContent="次の問題";
+  nextBtn.classList.add("hidden");
 }
 function collect(branch,side){
   const p=document.querySelector(`.branch[data-branch="${branch}"]`),sels=[...p.querySelectorAll(`select[data-side="${side}"]`)],amts=[...p.querySelectorAll(`input[data-side="${side}"]`)];
@@ -1012,15 +1035,27 @@ function finishGrading(mode){
   state.stats[q.id]=s;
   graded=true;
 
+  // 今回のセットだけの正解数を記録
+  setAnswered++;
+  if(ok) setCorrect++;
+
   // 採点した瞬間にこの問題は完了扱い。
   // 再開位置は次の問題へ進めて保存する。
   if(currentIndex+1>=queue.length){
+    state.lastSetResult={
+      total:queue.length,
+      answered:setAnswered,
+      correct:setCorrect,
+      finishedAt:new Date().toISOString()
+    };
     state.session=null;
   }else{
     state.session={
       ids:queue.map(x=>x.id),
       index:currentIndex+1,
-      graded:false
+      graded:false,
+      setAnswered:setAnswered,
+      setCorrect:setCorrect
     };
   }
 
@@ -1050,27 +1085,90 @@ function finishGrading(mode){
   document.getElementById("gradeBtn").classList.add("hidden");
   document.getElementById("uncertainBtn").classList.add("hidden");
   document.getElementById("dontKnowBtn").classList.add("hidden");
-  document.getElementById("nextBtn").classList.remove("hidden");
+  const nextBtn=document.getElementById("nextBtn");
+  if(currentIndex+1>=queue.length) nextBtn.textContent="結果を見る";
+  nextBtn.classList.remove("hidden");
 }
 
 function grade(){finishGrading("normal");}
 function gradeUncertain(){finishGrading("uncertain");}
 function gradeDontKnow(){finishGrading("unknown");}
 
+
+function formatScoreNumber(n){
+  const rounded=Math.round(n*10)/10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function showSetSummary(result){
+  if(!result || !result.total) return;
+
+  const total=Number(result.total)||0;
+  const correct=Number(result.correct)||0;
+  const rate=total ? (correct/total)*100 : 0;
+  const predicted=total ? (correct/total)*20 : 0;
+
+  document.getElementById("quiz").classList.add("hidden");
+  document.getElementById("setup").classList.add("hidden");
+  document.getElementById("resumeCard").classList.add("hidden");
+  document.getElementById("questionManager").classList.add("hidden");
+  document.getElementById("setSummary").classList.remove("hidden");
+
+  document.getElementById("setSummaryCorrect").textContent=
+    `${total}問中 ${correct}問正解`;
+
+  document.getElementById("setSummaryScore").textContent=
+    `${formatScoreNumber(predicted)} / 20点`;
+
+  document.getElementById("setSummaryRate").textContent=
+    `正答率 ${formatScoreNumber(rate)}%`;
+
+  if(total===5){
+    document.getElementById("setSummaryNote").textContent=
+      "5問セットなので、1問4点でそのまま20点満点の得点です。";
+  }else{
+    document.getElementById("setSummaryNote").textContent=
+      `正答率を本番の5問（1問4点）に換算した予想点です。`;
+  }
+}
+
+function closeSetSummary(){
+  document.getElementById("setSummary").classList.add("hidden");
+  document.getElementById("setup").classList.remove("hidden");
+  state.lastSetResult=null;
+  saveState();
+  renderResume();
+}
+
 function nextQ(){
   if(currentIndex+1>=queue.length){
-    state.session=null;saveState();
-    alert("このセットは終了です。");
-    document.getElementById("quiz").classList.add("hidden");document.getElementById("setup").classList.remove("hidden");renderResume();
+    const result=state.lastSetResult || {
+      total:queue.length,
+      answered:setAnswered,
+      correct:setCorrect
+    };
+    state.session=null;
+    saveState();
+    showSetSummary(result);
     return;
   }
   currentIndex++;
-  state.session={ids:queue.map(x=>x.id),index:currentIndex,graded:false};saveState();renderQuestion();
+  state.session={
+    ids:queue.map(x=>x.id),
+    index:currentIndex,
+    graded:false,
+    setAnswered:setAnswered,
+    setCorrect:setCorrect
+  };
+  saveState();
+  renderQuestion();
 }
 function resumeSession(){
   if(!state.session)return;
   queue=state.session.ids.map(id=>QUESTIONS.find(q=>q.id===id)).filter(Boolean);
   currentIndex=Math.min(state.session.index,Math.max(0,queue.length-1));
+  setAnswered=Number(state.session.setAnswered||0);
+  setCorrect=Number(state.session.setCorrect||0);
   showQuiz();renderQuestion();
 }
 function renderResume(){
@@ -1104,6 +1202,7 @@ document.getElementById("answerArea").addEventListener("paste",e=>{
   setTimeout(()=>formatAmountInput(e.target),0);
 });
 
+document.getElementById("summaryBackBtn").onclick=closeSetSummary;
 document.getElementById("startBtn").onclick=startQuiz;
 document.getElementById("gradeBtn").onclick=grade;
 document.getElementById("uncertainBtn").onclick=gradeUncertain;
